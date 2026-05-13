@@ -1,0 +1,3 @@
+- [ ] get an icon to appear in the waybar
+- [ ] figure out why `printf` doesn't appear in waybar logs
+- [ ] 
