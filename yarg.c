@@ -8,6 +8,8 @@
 
 #include <mpv/client.h>
 
+#include <stb/stb_ds.h>
+
 #include "waybar_cffi_module.h"
 
 #include "yarg.h"
@@ -19,9 +21,9 @@ static int instance_count = 0;
 static mpv_handle *mpv_ctx = NULL;
 static pthread_mutex_t mpv_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define FINFO(msg, args...) printf("INFO[yarg]: " msg, args)
-#define FFATAL(msg, args...) fprintf(stderr, "FATAL[yarg]: " msg, args)
-#define DEBUG(msg) printf("DEBUG[yarg]: " msg)
+static char **stations;
+static size_t current_station;
+static pthread_mutex_t station_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void onclicked(GtkButton* button) {
   char text[256];
@@ -53,17 +55,7 @@ void *wbcffi_init(
   size_t config_entries_len
 ) {
   int rc;
-  // Basic initialization
-  const char *log_file_path;
-  for (size_t i = 0; i < config_entries_len; ++i) {
-    if (strcmp(config_entries[i].key, "log_file") == 0) {
-      log_file_path = config_entries[i].value;
-      break;
-    }
-  }
 
-
-  FILE *log_fd = fopen(log_file_path, "c");
   FINFO("yarg initialized, %d instances\n", ++instance_count);
 
   Yarg *yarg = malloc(sizeof(yarg));
