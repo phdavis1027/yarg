@@ -1,3 +1,5 @@
-- [ ] get an icon to appear in the waybar
+- [x] get an icon to appear in the waybar
 - [ ] figure out why `printf` doesn't appear in waybar logs
-- [ ] 
+- [ ] load stations from waybar config
+- [ ] put a real selector menu in the button
+- [ ] play the selected file

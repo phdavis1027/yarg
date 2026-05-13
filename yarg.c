@@ -2,12 +2,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <assert.h>
 #include <pthread.h>
 #include <locale.h>
 
 #include <mpv/client.h>
 
 #include "waybar_cffi_module.h"
+
+#include "yarg.h"
 
 const size_t wbcffi_version = 2; 
 
@@ -26,11 +29,23 @@ void onclicked(GtkButton* button) {
   gtk_button_set_label(button, text);
 }
 
-typedef struct {
-  wbcffi_module *waybar_module;
-  GtkBox* container;
-  GtkButton *button;
-} Yarg;
+int initialize_mpv() {
+    int rc;
+    assert(mpv_ctx == NULL);
+    mpv_ctx = mpv_create();
+    if (mpv_ctx == NULL) {
+      return 1;
+    }
+    if ((rc = mpv_request_log_messages(mpv_ctx, "debug")) < 0) {
+      return rc;
+    }
+    if ((rc = mpv_initialize(mpv_ctx)) < 0) {
+      return rc;
+    }
+}
+
+
+// Required API functions
 
 void *wbcffi_init(
   const wbcffi_init_info* init_info,
@@ -80,17 +95,8 @@ void *wbcffi_init(
 
   setlocale(LC_NUMERIC, "C");
 
-  if (mpv_ctx == NULL) {
-    mpv_ctx = mpv_create();
-    if (mpv_ctx == NULL) {
-      exit(1);
-    }
-    if ((rc = mpv_request_log_messages(mpv_ctx, "debug")) < 0) {
-      exit(rc);
-    }
-    if ((rc = mpv_initialize(mpv_ctx)) < 0) {
-      exit(rc);
-    }
+  if (mpv_ctx == NULL && (rc = initialize_mpv()) != 0) {
+    exit(rc);
   }
 
   return yarg;
