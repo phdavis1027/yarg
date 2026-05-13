@@ -1,0 +1,112 @@
+#include <gtk/gtk.h>
+#include <string.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <locale.h>
+
+#include <mpv/client.h>
+
+#include "waybar_cffi_module.h"
+
+const size_t wbcffi_version = 2; 
+
+static int instance_count = 0;
+
+static mpv_handle *mpv_ctx = NULL;
+static pthread_mutex_t mpv_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define FINFO(msg, args...) printf("INFO[yarg]: " msg, args)
+#define FFATAL(msg, args...) fprintf(stderr, "FATAL[yarg]: " msg, args)
+#define DEBUG(msg) printf("DEBUG[yarg]: " msg)
+
+void onclicked(GtkButton* button) {
+  char text[256];
+  snprintf(text, 256, "Dice throw result: %d", rand() % 6 + 1);
+  gtk_button_set_label(button, text);
+}
+
+typedef struct {
+  wbcffi_module *waybar_module;
+  GtkBox* container;
+  GtkButton *button;
+} Yarg;
+
+void *wbcffi_init(
+  const wbcffi_init_info* init_info,
+  const wbcffi_config_entry* config_entries,
+  size_t config_entries_len
+) {
+  int rc;
+  // Basic initialization
+  const char *log_file_path;
+  for (size_t i = 0; i < config_entries_len; ++i) {
+    if (strcmp(config_entries[i].key, "log_file") == 0) {
+      log_file_path = config_entries[i].value;
+      break;
+    }
+  }
+
+
+  FILE *log_fd = fopen(log_file_path, "c");
+  FINFO("yarg initialized, %d instances\n", ++instance_count);
+
+  Yarg *yarg = malloc(sizeof(yarg));
+  if (yarg == NULL) {
+    FFATAL("Failed to allocate yarg instance, %d instances\n", instance_count);
+    return NULL;
+  }
+
+  yarg->waybar_module = init_info->obj;
+
+  // Setup widgets
+  GtkContainer *root = init_info->get_root_widget(init_info->obj);
+
+  yarg->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5));
+  gtk_container_add(GTK_CONTAINER(root), GTK_WIDGET(yarg->container));
+
+  GtkLabel *label = GTK_LABEL(gtk_label_new("[Example C FFI Module:"));
+  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(label));
+
+  // Add a button
+  yarg->button = GTK_BUTTON(gtk_button_new_with_label("click me !"));
+  g_signal_connect(yarg->button, "clicked", G_CALLBACK(onclicked), NULL);
+  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(yarg->button));
+
+
+  // Add a label
+  label = GTK_LABEL(gtk_label_new("]"));
+  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(label));
+
+  setlocale(LC_NUMERIC, "C");
+
+  if (mpv_ctx == NULL) {
+    mpv_ctx = mpv_create();
+    if (mpv_ctx == NULL) {
+      exit(1);
+    }
+    if ((rc = mpv_request_log_messages(mpv_ctx, "debug")) < 0) {
+      exit(rc);
+    }
+    if ((rc = mpv_initialize(mpv_ctx)) < 0) {
+      exit(rc);
+    }
+  }
+
+  return yarg;
+}
+
+void wbcffi_deinit(void* instance) {
+  printf("cffi_example inst=%p: free memory\n", instance);
+  free(instance);
+}
+
+void wbcffi_update(void* instance) { printf("cffi_example inst=%p: Update request\n", instance); }
+
+void wbcffi_refresh(void* instance, int signal) {
+  printf("cffi_example inst=%p: Received refresh signal %d\n", instance, signal);
+}
+
+void wbcffi_doaction(void* instance, const char* name) {
+  printf("cffi_example inst=%p: doAction(%s)\n", instance, name);
+}
