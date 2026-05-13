@@ -8,10 +8,9 @@
 
 #include <mpv/client.h>
 
-#include <stb/stb_ds.h>
-
 #include "waybar_cffi_module.h"
 
+#include "station.h"
 #include "yarg.h"
 
 const size_t wbcffi_version = 2; 
@@ -21,8 +20,8 @@ static int instance_count = 0;
 static mpv_handle *mpv_ctx = NULL;
 static pthread_mutex_t mpv_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static char **stations;
-static size_t current_station;
+static HM_Station stations;
+static int current_station = -1;
 static pthread_mutex_t station_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void onclicked(GtkButton* button) {
@@ -33,6 +32,7 @@ void onclicked(GtkButton* button) {
 
 int initialize_mpv() {
     int rc;
+    pthread_mutex_lock(&mpv_ctx_mutex);
     assert(mpv_ctx == NULL);
     mpv_ctx = mpv_create();
     if (mpv_ctx == NULL) {
@@ -44,8 +44,11 @@ int initialize_mpv() {
     if ((rc = mpv_initialize(mpv_ctx)) < 0) {
       return rc;
     }
+    pthread_mutex_unlock(&mpv_ctx_mutex);
+    return 0;
 }
 
+const char STATION_SUBKEY[] = "station";
 
 // Required API functions
 
@@ -56,11 +59,19 @@ void *wbcffi_init(
 ) {
   int rc;
 
-  FINFO("yarg initialized, %d instances\n", ++instance_count);
+  const size_t station_prefix_len = strlen(STATION_SUBKEY);
+  for (int i = 0; i < config_entries_len; ++i) {
+      const char *key = config_entries[i].key;
+      if (strncmp(key, STATION_SUBKEY, station_prefix_len) == 0
+          && key[station_prefix_len] == '/') {
+          const char *station = key + station_prefix_len + 1;
+	  const char *url = config_entries[i].value;
+	  hmput(stations, station, url);
+      }
+  }
 
   Yarg *yarg = malloc(sizeof(yarg));
   if (yarg == NULL) {
-    FFATAL("Failed to allocate yarg instance, %d instances\n", instance_count);
     return NULL;
   }
 
@@ -90,6 +101,10 @@ void *wbcffi_init(
   if (mpv_ctx == NULL && (rc = initialize_mpv()) != 0) {
     exit(rc);
   }
+
+  yarg->stations = stations;
+  yarg->current_station = &current_station;
+  yarg->station_mutex = &station_mutex; 
 
   return yarg;
 }

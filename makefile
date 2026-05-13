@@ -20,6 +20,6 @@ macro-expand:
 		$(GTK_CFLAGS) \
 		$(MPV_CFLAGS) \
 		-E \
-		yarg.c -o yarg.so \
+		yarg.c -o yarg.e \
 		$(GTK_LIBS) \
 		$(MPV_LIBS)
