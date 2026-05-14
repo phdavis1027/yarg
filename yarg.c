@@ -27,8 +27,11 @@ static pthread_mutex_t station_mutex = PTHREAD_MUTEX_INITIALIZER;
 int initialize_mpv() {
     int rc;
     pthread_mutex_lock(&mpv_ctx_mutex);
+    if (mpv_ctx != NULL) {
+      pthread_mutext_unlock(&mpv_ctx_mutex);
+      return 0;
+    }
     setlocale(LC_NUMERIC, "C");
-    assert(mpv_ctx == NULL);
     mpv_ctx = mpv_create();
     if (mpv_ctx == NULL) {
       return 1;
@@ -174,7 +177,7 @@ void *wbcffi_init(
 
   setup_menu(yarg, init_info);
 
-  if (mpv_ctx == NULL && (rc = initialize_mpv()) != 0) {
+  if ((rc = initialize_mpv()) != 0) {
     exit(rc);
   }
 
