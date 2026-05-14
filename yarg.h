@@ -9,8 +9,6 @@
 
 #include "util.h"
 
-DA(GtkMenuItem);
-
 typedef struct {
   wbcffi_module *waybar_module;
 
@@ -21,6 +19,8 @@ typedef struct {
   HM_Station stations;
   int *current_station;
   pthread_mutex_t *station_mutex;
+
+  int instance_no;
 } Yarg;
 
 #endif

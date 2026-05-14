@@ -15,7 +15,7 @@
 
 const size_t wbcffi_version = 2; 
 
-static int instance_count = 0;
+static int instance_no = 0;
 
 static mpv_handle *mpv_ctx = NULL;
 static pthread_mutex_t mpv_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -44,45 +44,25 @@ int initialize_mpv() {
 }
 
 static const char STATION_SUBKEY[] = "station";
-
 void load_stations(
+  const Yarg *yarg,
   const wbcffi_config_entry* config_entries,
   size_t config_entries_len
 ) {
+  pthread_mutex_lock(&station_mutex);
   const size_t station_prefix_len = strlen(STATION_SUBKEY);
   for (int i = 0; i < config_entries_len; ++i) {
       const char *key = config_entries[i].key;
+      printf("[yarg %d]: loading key %s\n", yarg->instance_no, key);
       if (strncmp(key, STATION_SUBKEY, station_prefix_len) == 0
           && key[station_prefix_len] == '/') {
           const char *station = key + station_prefix_len + 1;
+	  printf("[yarg %d]: Loading station %s\n", yarg->instance_no, station);
 	  const char *url = config_entries[i].value;
 	  hmput(stations, station, url);
       }
   }
-}
-
-void setup_menu(Yarg *yarg) {
-  GtkContainer *root = init_info->get_root_widget(init_info->obj);
-
-  yarg->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5));
-  gtk_container_add(GTK_CONTAINER(root), GTK_WIDGET(yarg->container));
-
-  yarg->menu = GTK_MENU(gtk_menu_new());
-  for (ptrdiff_t i = 0; i < hmlen(yarg->stations); ++i) {
-    GtkWidget *item = gtk_menu_item_new_with_label(yarg->stations[i].key);
-    gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
-  }
-  gtk_widget_show_all(GTK_WIDGET(yarg->menu));
-
-  yarg->button = GTK_BUTTON(gtk_button_new_with_label("RADIO"));
-  gtk_menu_attach_to_widget(yarg->menu, GTK_WIDGET(yarg->button), NULL);
-  g_signal_connect_swapped(
-    yarg->button,
-    "button_press_event",
-    G_CALLBACK(popup_menu),
-    yarg->menu
-  );
-  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(yarg->button));
+  pthread_mutex_unlock(&station_mutex);
 }
 
 static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
@@ -109,6 +89,66 @@ static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
   return FALSE;
 }
 
+typedef struct {
+  const char *station;
+  Yarg *yarg;
+} DebugThing;
+
+static gint select_station(GtkWidget *widget, const DebugThing *data) {
+  printf("[yarg %d] select station called at all", data->yarg->instance_no);
+  pthread_mutex_lock(&station_mutex);
+  GtkMenuItem *item;
+
+  g_return_val_if_fail(hmgeti(stations, data->station) >= 0, FALSE);
+  g_return_val_if_fail(GTK_IS_MENU_ITEM(widget), FALSE);
+
+  printf("[yarg %d] item corresponding to station %s selected, unlocking  stations\n", data->yarg->instance_no, data->station);
+  
+  // TODO: Tighten this critical section, if possible
+  pthread_mutex_unlock(&station_mutex);
+
+  return TRUE;
+}
+
+void setup_menu(Yarg *yarg, const wbcffi_init_info* init_info) {
+  // TODO: tighten this critical section
+  printf("[yarg %d] setup_menu, locking station\n", yarg->instance_no);
+  pthread_mutex_lock(&station_mutex);
+  GtkContainer *root = init_info->get_root_widget(init_info->obj);
+
+  yarg->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5));
+  gtk_container_add(GTK_CONTAINER(root), GTK_WIDGET(yarg->container));
+
+  yarg->menu = GTK_MENU(gtk_menu_new());
+  // Build menu items from `stations`
+  for (int i = 0; i < hmlen(yarg->stations); i++) {
+    GtkWidget *item = gtk_menu_item_new_with_label(yarg->stations[i].key);
+    // Attach them to the parent menu
+    gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
+    // Wire them up to the "selected" signal
+    g_signal_connect_swapped(
+      item,
+      "select",
+      G_CALLBACK(select_station),
+      yarg->stations[i].key
+    );
+    printf("[yarg %d]: wired callback to station %s\n", yarg->instance_no, yarg->stations[i].key);
+  }
+  gtk_widget_show_all(GTK_WIDGET(yarg->menu));
+
+  yarg->button = GTK_BUTTON(gtk_button_new_with_label("RADIO"));
+  gtk_menu_attach_to_widget(yarg->menu, GTK_WIDGET(yarg->button), NULL);
+  g_signal_connect_swapped(
+    yarg->button,
+    "button_press_event",
+    G_CALLBACK(popup_menu),
+    yarg->menu
+  );
+  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(yarg->button));
+  printf("[yarg: %d] menu setup complete, unlocking station\n", yarg->instance_no);
+  pthread_mutex_unlock(&station_mutex);
+}
+
 // Required API functions
 
 void *wbcffi_init(
@@ -118,19 +158,21 @@ void *wbcffi_init(
 ) {
   int rc;
 
-  load_stations(config_entries, config_entries_len);
-
   Yarg *yarg = malloc(sizeof(*yarg));
+  yarg->instance_no = instance_no++; 
+  
   if (yarg == NULL) {
     return NULL;
   }
+
+  load_stations(yarg, config_entries, config_entries_len);
 
   yarg->waybar_module = init_info->obj;
   yarg->stations = stations;
   yarg->current_station = &current_station;
   yarg->station_mutex = &station_mutex;
 
-  setup_menu(yarg);
+  setup_menu(yarg, init_info);
 
   if (mpv_ctx == NULL && (rc = initialize_mpv()) != 0) {
     exit(rc);
