@@ -61,6 +61,30 @@ void load_stations(
   }
 }
 
+void setup_menu(Yarg *yarg) {
+  GtkContainer *root = init_info->get_root_widget(init_info->obj);
+
+  yarg->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5));
+  gtk_container_add(GTK_CONTAINER(root), GTK_WIDGET(yarg->container));
+
+  yarg->menu = GTK_MENU(gtk_menu_new());
+  for (ptrdiff_t i = 0; i < hmlen(yarg->stations); ++i) {
+    GtkWidget *item = gtk_menu_item_new_with_label(yarg->stations[i].key);
+    gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
+  }
+  gtk_widget_show_all(GTK_WIDGET(yarg->menu));
+
+  yarg->button = GTK_BUTTON(gtk_button_new_with_label("RADIO"));
+  gtk_menu_attach_to_widget(yarg->menu, GTK_WIDGET(yarg->button), NULL);
+  g_signal_connect_swapped(
+    yarg->button,
+    "button_press_event",
+    G_CALLBACK(popup_menu),
+    yarg->menu
+  );
+  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(yarg->button));
+}
+
 static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
   GtkMenu *menu;
   GdkEventButton *event_button;
@@ -106,27 +130,7 @@ void *wbcffi_init(
   yarg->current_station = &current_station;
   yarg->station_mutex = &station_mutex;
 
-  GtkContainer *root = init_info->get_root_widget(init_info->obj);
-
-  yarg->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5));
-  gtk_container_add(GTK_CONTAINER(root), GTK_WIDGET(yarg->container));
-
-  yarg->menu = GTK_MENU(gtk_menu_new());
-  for (ptrdiff_t i = 0; i < hmlen(yarg->stations); ++i) {
-    GtkWidget *item = gtk_menu_item_new_with_label(yarg->stations[i].key);
-    gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
-  }
-  gtk_widget_show_all(GTK_WIDGET(yarg->menu));
-
-  yarg->button = GTK_BUTTON(gtk_button_new_with_label("RADIO"));
-  gtk_menu_attach_to_widget(yarg->menu, GTK_WIDGET(yarg->button), NULL);
-  g_signal_connect_swapped(
-    yarg->button,
-    "button_press_event",
-    G_CALLBACK(popup_menu),
-    yarg->menu
-  );
-  gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(yarg->button));
+  setup_menu(yarg);
 
   if (mpv_ctx == NULL && (rc = initialize_mpv()) != 0) {
     exit(rc);
