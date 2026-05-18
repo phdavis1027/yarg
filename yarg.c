@@ -129,7 +129,7 @@ void setup_menu(Yarg *yarg, const wbcffi_init_info* init_info) {
     // Attach them to the parent menu
     gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
     // Wire them up to the "selected" signal
-    g_signal_connect_swapped(
+    g_signal_connect(
       item,
       "select",
       G_CALLBACK(select_station),
