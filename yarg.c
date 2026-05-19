@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <assert.h>
 #include <pthread.h>
@@ -56,6 +57,9 @@ void load_stations(
 ) {
   pthread_mutex_lock(&station_mutex);
   const size_t station_prefix_len = strlen(STATION_SUBKEY);
+  if (stations == NULL) {
+    sh_new_strdup(stations);
+  }
   for (int i = 0; i < config_entries_len; ++i) {
       const char *key = config_entries[i].key;
       printf("[yarg %d]: loading key %s\n", yarg->instance_no, key);
@@ -65,8 +69,14 @@ void load_stations(
           const char *station = key + station_prefix_len + 1;
 	  printf("[yarg %d]: Loading station %s\n", yarg->instance_no, station);
 	  const char *url = config_entries[i].value;
+	  int station_idx = shgeti(stations, station);
+	  char *url_copy = strdup(url);
+	  assert(url_copy != NULL);
 
-	  shput(stations, station, url);
+	  if (station_idx >= 0) {
+	    free(stations[station_idx].value);
+	  }
+	  shput(stations, station, url_copy);
       }
   }
   pthread_mutex_unlock(&station_mutex);
