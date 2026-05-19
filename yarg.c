@@ -28,7 +28,7 @@ int initialize_mpv() {
     int rc;
     pthread_mutex_lock(&mpv_ctx_mutex);
     if (mpv_ctx != NULL) {
-      pthread_mutext_unlock(&mpv_ctx_mutex);
+      pthread_mutex_unlock(&mpv_ctx_mutex);
       return 0;
     }
     setlocale(LC_NUMERIC, "C");
@@ -59,9 +59,11 @@ void load_stations(
       printf("[yarg %d]: loading key %s\n", yarg->instance_no, key);
       if (strncmp(key, STATION_SUBKEY, station_prefix_len) == 0
           && key[station_prefix_len] == '/') {
+
           const char *station = key + station_prefix_len + 1;
 	  printf("[yarg %d]: Loading station %s\n", yarg->instance_no, station);
 	  const char *url = config_entries[i].value;
+
 	  hmput(stations, station, url);
       }
   }
@@ -92,20 +94,15 @@ static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
   return FALSE;
 }
 
-typedef struct {
-  const char *station;
-  Yarg *yarg;
-} DebugThing;
-
-static gint select_station(GtkWidget *widget, const DebugThing *data) {
-  printf("[yarg %d] select station called at all", data->yarg->instance_no);
+static gint select_station(GtkWidget *widget, const char *station) {
   pthread_mutex_lock(&station_mutex);
   GtkMenuItem *item;
 
-  g_return_val_if_fail(hmgeti(stations, data->station) >= 0, FALSE);
+  int station_idx = hmgeti(stations, station);
+  g_return_val_if_fail(station_idx >= 0, FALSE);
   g_return_val_if_fail(GTK_IS_MENU_ITEM(widget), FALSE);
 
-  printf("[yarg %d] item corresponding to station %s selected, unlocking  stations\n", data->yarg->instance_no, data->station);
+  printf("[yarg] item corresponding to station %s selected, unlocking  stations\n", station);
   
   // TODO: Tighten this critical section, if possible
   pthread_mutex_unlock(&station_mutex);
