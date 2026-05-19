@@ -139,11 +139,13 @@ void setup_menu(Yarg *yarg, const wbcffi_init_info* init_info) {
     GtkWidget *item = gtk_menu_item_new_with_label(yarg->stations[i].key);
     // Attach them to the parent menu
     gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
-    // Wire them up to the "selected" signal
+    // Wire them up to the "activate" signal,
+    // which is apparently what happens when the user
+    // clicks the menu item.
     g_signal_connect(
       item,
-      "select",
-      G_CALLBACK(select_station),
+      "activate",
+      G_CALLBACK(play_station),
       yarg->stations[i].key
     );
     printf("[yarg %d]: wired callback to station %s\n", yarg->instance_no, yarg->stations[i].key);
