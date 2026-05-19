@@ -47,6 +47,8 @@ int initialize_mpv() {
 }
 
 static const char STATION_SUBKEY[] = "station";
+// This function's *only* job is to make sure that the static `stations`
+// instance is correct.
 void load_stations(
   const Yarg *yarg,
   const wbcffi_config_entry* config_entries,
@@ -64,7 +66,7 @@ void load_stations(
 	  printf("[yarg %d]: Loading station %s\n", yarg->instance_no, station);
 	  const char *url = config_entries[i].value;
 
-	  hmput(stations, station, url);
+	  shput(stations, station, url);
       }
   }
   pthread_mutex_unlock(&station_mutex);
@@ -98,7 +100,7 @@ static gint select_station(GtkWidget *widget, const char *station) {
   pthread_mutex_lock(&station_mutex);
   GtkMenuItem *item;
 
-  int station_idx = hmgeti(stations, station);
+  int station_idx = shgeti(stations, station);
   g_return_val_if_fail(station_idx >= 0, FALSE);
   g_return_val_if_fail(GTK_IS_MENU_ITEM(widget), FALSE);
 
@@ -121,7 +123,9 @@ void setup_menu(Yarg *yarg, const wbcffi_init_info* init_info) {
 
   yarg->menu = GTK_MENU(gtk_menu_new());
   // Build menu items from `stations`
-  for (int i = 0; i < hmlen(yarg->stations); i++) {
+  int station_len = shlen(yarg->stations);
+  printf("[yarg: %d] found HM_Station with len %d\n", yarg->instance_no, station_len);
+  for (int i = 0; i < station_len; i++) {
     GtkWidget *item = gtk_menu_item_new_with_label(yarg->stations[i].key);
     // Attach them to the parent menu
     gtk_menu_shell_append(GTK_MENU_SHELL(yarg->menu), item);
