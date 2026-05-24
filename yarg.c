@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <string.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -23,7 +24,61 @@ static pthread_mutex_t mpv_ctx_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static HM_Station stations;
 static int current_station = -1;
-static pthread_mutex_t station_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static pthread_mutex_t station_mutex;
+static pthread_once_t station_mutex_once = PTHREAD_ONCE_INIT;
+
+static int station_init_rc;
+static void initialize_station_mutex() {
+  int rc;
+  pthread_mutexattr_t attr;
+
+  if ((rc = pthread_mutexattr_init(&attr)) != 0) {
+    station_init_rc = rc;
+    return;
+  }
+
+  if ((rc = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK)) != 0) {
+    pthread_mutexattr_destroy(&attr);
+    station_init_rc = rc;
+    return;
+  }
+
+  if ((rc = pthread_mutex_init(&station_mutex, &attr)) != 0) {
+    pthread_mutexattr_destroy(&attr);
+    station_init_rc = rc;
+    return;
+  }
+
+  if ((rc = pthread_mutexattr_destroy(&attr)) != 0) {
+    station_init_rc = rc;
+    return;
+  }
+
+  station_init_rc = 0;
+}
+
+static int lock_station_mutex() {
+  int rc;
+
+  if ((rc = pthread_once(&station_mutex_once, initialize_station_mutex)) != 0) {
+    return rc;
+  }
+
+  if (station_init_rc != 0) {
+    return station_init_rc;
+  }
+
+  if ((rc = pthread_mutex_lock(&station_mutex)) != 0) {
+    return rc;
+  }
+
+  return 0;
+}
+
+static int unlock_station_mutex() {
+  return pthread_mutex_unlock(&station_mutex);
+}
 
 int initialize_mpv() {
     int rc;
@@ -55,7 +110,7 @@ void load_stations(
   const wbcffi_config_entry* config_entries,
   size_t config_entries_len
 ) {
-  pthread_mutex_lock(&station_mutex);
+  assert(lock_station_mutex() == 0);
   const size_t station_prefix_len = strlen(STATION_SUBKEY);
   if (stations == NULL) {
     sh_new_strdup(stations);
@@ -79,7 +134,7 @@ void load_stations(
 	  shput(stations, station, url_copy);
       }
   }
-  pthread_mutex_unlock(&station_mutex);
+  assert(unlock_station_mutex() == 0);
 }
 
 static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
@@ -106,18 +161,30 @@ static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
   return FALSE;
 }
 
-static gint select_station(GtkWidget *widget, const char *station) {
-  pthread_mutex_lock(&station_mutex);
-  GtkMenuItem *item;
+// NOTE: This function assumes you hold the 
+void set_station(const int station_idx) {
+}
 
-  int station_idx = shgeti(stations, station);
-  g_return_val_if_fail(station_idx >= 0, FALSE);
-  g_return_val_if_fail(GTK_IS_MENU_ITEM(widget), FALSE);
+static gint play_station(GtkWidget *widget, const char *station_key) {
+  printf("[yarg] play_station is being called at all\n");
+  assert(lock_station_mutex() == 0);
 
-  printf("[yarg] item corresponding to station %s selected, unlocking  stations\n", station);
+  int station_idx = shgeti(stations, station_key);
+  if (station_idx < 0 || !GTK_IS_MENU_ITEM(widget)) {
+    assert(unlock_station_mutex() == 0);
+    return FALSE;
+  }
+
+  const Station station = stations[station_idx];
+  if (station.key == NULL || station.value == NULL) {
+    assert(unlock_station_mutex() == 0);
+    return FALSE;
+  }
+
+  current_station = station_idx;
   
   // TODO: Tighten this critical section, if possible
-  pthread_mutex_unlock(&station_mutex);
+  assert(unlock_station_mutex() == 0);
 
   return TRUE;
 }
@@ -125,7 +192,7 @@ static gint select_station(GtkWidget *widget, const char *station) {
 void setup_menu(Yarg *yarg, const wbcffi_init_info* init_info) {
   // TODO: tighten this critical section
   printf("[yarg %d] setup_menu, locking station\n", yarg->instance_no);
-  pthread_mutex_lock(&station_mutex);
+  assert(lock_station_mutex() == 0);
   GtkContainer *root = init_info->get_root_widget(init_info->obj);
 
   yarg->container = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5));
@@ -162,7 +229,7 @@ void setup_menu(Yarg *yarg, const wbcffi_init_info* init_info) {
   );
   gtk_container_add(GTK_CONTAINER(yarg->container), GTK_WIDGET(yarg->button));
   printf("[yarg: %d] menu setup complete, unlocking station\n", yarg->instance_no);
-  pthread_mutex_unlock(&station_mutex);
+  assert(unlock_station_mutex() == 0);
 }
 
 // Required API functions
