@@ -181,6 +181,18 @@ static gint play_station(GtkWidget *widget, const char *station_key) {
     return FALSE;
   }
 
+  const char command[3][128] = {"loadfile", {0}, "play"}; 
+  snprintf(command[1], 128, "%s", station.value);
+
+  const char stop[1][16] = {"stop"};
+
+  if (current_station == station_idx) {
+    mpv_command(mpv_ctx, (const char**) command);
+  } else {
+    mpv_command(mpv_ctx, (const char**) stop);
+    mpv_command(mpv_ctx, (const char**) command);
+  }
+
   current_station = station_idx;
   
   // TODO: Tighten this critical section, if possible
