@@ -177,7 +177,6 @@ int trim_trailing_whitespace(const char *in) {
 }
 
 static gint play_station(GtkWidget *widget, const char *station_key) {
-  printf("[yarg] play_station is being called at all\n");
   assert(lock_station_mutex() == 0);
 
   int station_idx = shgeti(stations, station_key);
@@ -192,8 +191,6 @@ static gint play_station(GtkWidget *widget, const char *station_key) {
     return FALSE;
   }
 
-  const char command[3][128] = {"loadfile", {0}, "play"}; 
-  snprintf(command[1], 128, "%s", station.value);
   const char url[128];
   int trimmed = trim_trailing_whitespace(station.value);
   int written = snprintf(url, trimmed + 1, "%s", station.value);
