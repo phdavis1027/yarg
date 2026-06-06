@@ -176,6 +176,12 @@ int trim_trailing_whitespace(const char *in) {
     return len;
 }
 
+char *unwrap_quotes(const char * in) {
+    char *out = malloc(strlen(in) + 1);
+    strncpy(out, in + 1, strlen(in) - 2);
+    return out;
+}
+
 static gint play_station(GtkWidget *widget, const char *station_key) {
   assert(lock_station_mutex() == 0);
 
@@ -192,22 +198,28 @@ static gint play_station(GtkWidget *widget, const char *station_key) {
   }
 
   const char url[128];
+  // TODO: Parse, don't validate
   int trimmed = trim_trailing_whitespace(station.value);
   int written = snprintf(url, trimmed + 1, "%s", station.value);
-  const char *command[128] = {"loadfile", url, "play", NULL}; 
+  const char *unwrapped = unwrap_quotes(url);
 
-  const char *stop[2] = {"stop",  NULL};
+  const char *command[] = {"loadfile", unwrapped, NULL}; 
 
-  if (current_station == station_idx || current_station < 0) {
-    int rc = mpv_command(mpv_ctx, (const char**) command);
-    printf("[yarg] mpv exit code: [%d]\n", rc);
-    fflush(stdout);
-  } else {
+  const char *stop[] = {"stop",  NULL};
+
+  if (current_station == station_idx) {
     mpv_command(mpv_ctx, (const char**) stop);
+    current_station = -1;
+  } else {
+    if (current_station > 0) {
+	mpv_command(mpv_ctx, (const char**) stop);
+    }
     mpv_command(mpv_ctx, (const char**) command);
+    current_station = station_idx;
   }
 
-  current_station = station_idx;
+  free(unwrapped);
+
   
   // TODO: Tighten this critical section, if possible
   assert(unlock_station_mutex() == 0);
