@@ -165,6 +165,17 @@ static gint popup_menu(GtkWidget *widget, GdkEvent *event) {
 void set_station(const int station_idx) {
 }
 
+// Returns the last index of the substring `out` of `in`
+// such that trailing whitespace has been trimmed
+// from `out`
+int trim_trailing_whitespace(const char *in) {
+    char *out = in;
+    int len = strlen(in);
+    assert(len > 0);
+    while (len > 0 && in[len - 1] == '\n') --len;
+    return len;
+}
+
 static gint play_station(GtkWidget *widget, const char *station_key) {
   printf("[yarg] play_station is being called at all\n");
   assert(lock_station_mutex() == 0);
@@ -183,11 +194,17 @@ static gint play_station(GtkWidget *widget, const char *station_key) {
 
   const char command[3][128] = {"loadfile", {0}, "play"}; 
   snprintf(command[1], 128, "%s", station.value);
+  const char url[128];
+  int trimmed = trim_trailing_whitespace(station.value);
+  int written = snprintf(url, trimmed + 1, "%s", station.value);
+  const char *command[128] = {"loadfile", url, "play", NULL}; 
 
-  const char stop[1][16] = {"stop"};
+  const char *stop[2] = {"stop",  NULL};
 
-  if (current_station == station_idx) {
-    mpv_command(mpv_ctx, (const char**) command);
+  if (current_station == station_idx || current_station < 0) {
+    int rc = mpv_command(mpv_ctx, (const char**) command);
+    printf("[yarg] mpv exit code: [%d]\n", rc);
+    fflush(stdout);
   } else {
     mpv_command(mpv_ctx, (const char**) stop);
     mpv_command(mpv_ctx, (const char**) command);
